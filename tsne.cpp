@@ -58,7 +58,7 @@ static void symmetrizeMatrix(unsigned int** row_P, unsigned int** col_P, double*
 
 // Perform t-SNE
 void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexity, double theta, int rand_seed,
-               bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter) {
+               bool skip_random_init, int max_iter, int stop_lying_iter, int mom_switch_iter, int callback_period, callback_t callback, void* user_data ) {
 
     // Set random seed
     if (skip_random_init != true) {
@@ -180,20 +180,35 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims, double perplexit
         if(iter == mom_switch_iter) momentum = final_momentum;
 
         // Print out progress
-        if (iter > 0 && (iter % 50 == 0 || iter == max_iter - 1)) {
+        if (iter > 0 && (iter % callback_period == 0 || iter == max_iter - 1)) {
             end = clock();
             double C = .0;
             if(exact) C = evaluateError(P, Y, N, no_dims);
             else      C = evaluateError(row_P, col_P, val_P, Y, N, no_dims, theta);  // doing approximate computation here!
-            if(iter == 0)
-                printf("Iteration %d: error is %f\n", iter + 1, C);
-            else {
-                total_time += (float) (end - start) / CLOCKS_PER_SEC;
-                printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, (float) (end - start) / CLOCKS_PER_SEC);
+
+            if( callback )
+            {
+              bool keep_going = callback(iter, C, user_data);
+
+              if(!keep_going)
+              {
+                break;
+              }
             }
-			start = clock();
+            else
+            {
+              if(iter == 0)
+                  printf("Iteration %d: error is %f\n", iter + 1, C);
+              else
+              {
+                  total_time += (float) (end - start) / CLOCKS_PER_SEC;
+                  printf("Iteration %d: error is %f (50 iterations in %4.2f seconds)\n", iter, C, (float) (end - start) / CLOCKS_PER_SEC);
+              }
+            }
+            start = clock();
         }
     }
+
     end = clock(); total_time += (float) (end - start) / CLOCKS_PER_SEC;
 
     // Clean up memory
